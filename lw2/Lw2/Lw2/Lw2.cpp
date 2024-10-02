@@ -54,39 +54,36 @@ struct Pixel
 
 using PixelMatrix = std::vector<std::vector<std::vector<std::vector<uint32_t>>>>;
 
-PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, const BMPFileHeader& bmpFileHeader, const BMPInfoHeader& bmpInfoHeader, const BMPColorHeader& bmpColorHeader)
+PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, int width, int height)
 {
-	int pixelCountWidth = bmpInfoHeader.width / (n * n);
-	int pixelCountHeight = bmpInfoHeader.height / (n * n);
-	int remainderWidth = bmpInfoHeader.width % (n * n); // остатки обозначают сколько групп будут содержать на пиксель больше, чем указано,
-	int remainderHeight = bmpInfoHeader.height % (n * n); // это надо чтобы у нас не осталось не прочитанных файлов
+	std::vector<uint8_t> image(width * height * 4);
+	int currentByte = 0;
+	inFile.read(reinterpret_cast<char*>(image.data()), image.size());
+
+	int pixelCountWidth = width / n;
+	int pixelCountHeight = height / n;
+	int remainderWidth = width % n; // остатки обозначают сколько групп будут содержать на пиксель больше, чем указано,
+	int remainderHeight = height % n; // это надо чтобы у нас не осталось не прочитанных файлов
 
 	PixelMatrix pixels;
 	for (int i = 0; i < n; i++)
 	{
 		int countInHeight = pixelCountHeight + (i < remainderHeight ? 1 : 0);
-		std::vector<std::vector<std::vector<uint32_t>>> row(n, std::vector<std::vector<uint32_t>>(countInHeight));
+		std::vector<std::vector<std::vector<uint32_t>>> row(n);
 
 		for (int y = 0; y < countInHeight; y++)
 		{
 			for (int j = 0; j < n; j++)
 			{
-				std::vector<uint32_t> line;
 				int countInWidth = pixelCountWidth + (j < remainderWidth ? 1 : 0);
-				std::vector<uint8_t> lineInByte(countInWidth * 4);
+				std::vector<uint32_t> line(countInWidth);
 
-				inFile.read(reinterpret_cast<char*>(lineInByte.data()), lineInByte.size());
-
-				for (int x = 0; x < lineInByte.size(); x += 4)
+				for (int x = 0; x < countInWidth; x++)
 				{
-					//uint32_t data;
-					uint32_t pixel;
-					std::memcpy(&pixel, &lineInByte[x], sizeof(uint32_t));
-					//Pixel pixel;
-					//pixel.data = data;
-					line.push_back(pixel);
+					std::memcpy(&line[x], &image[currentByte], sizeof(uint32_t));
+					currentByte += 4;
 				}
-				row[j][y] = line;
+				row[j].push_back(line);
 			}
 		}
 
@@ -96,26 +93,28 @@ PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, const BMPFileHeader& 
 	return pixels;
 }
 
-void WriteDataToFile(PixelMatrix pixels, std::ofstream& outFile)
+void WriteDataToFile(const PixelMatrix& pixels, std::ofstream& outFile, int byteCount)
 {
+	std::vector<uint8_t> image(byteCount);
+	int currentByte = 0;
+
 	for (int i = 0; i < pixels.size(); i++)
 	{
 		for (int y = 0; y < pixels[i][0].size(); y++)
 		{
+			std::vector<uint8_t> row;
 			for (int j = 0; j < pixels[i].size(); j++)
 			{
 				for (int x = 0; x < pixels[i][j][y].size(); x++)
 				{
-					uint32_t data = pixels[i][j][y][x];
-
-					std::vector<uint8_t> dataInByte(4);
-
-					std::memcpy(dataInByte.data(), &data, sizeof(uint32_t));
-					outFile.write(reinterpret_cast<char*>(dataInByte.data()), dataInByte.size());
+					std::memcpy(&image[currentByte], &pixels[i][j][y][x], sizeof(uint32_t));
+					currentByte += 4;
 				}
 			}
 		}
 	}
+
+	outFile.write(reinterpret_cast<char*>(image.data()), image.size());
 }
 
 int main(int argc, char* argv[])
@@ -153,7 +152,7 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	auto pixels = ReadDataFromFile(n, inFile, bmpFileHeader, bmpInfoHeader, bmpColorHeader);
+	auto pixels = ReadDataFromFile(n, inFile, bmpInfoHeader.width, bmpInfoHeader.height);
 
 	inFile.close();
 
@@ -162,7 +161,7 @@ int main(int argc, char* argv[])
 	outFile.write(reinterpret_cast<char*>(&bmpFileHeader), sizeof(BMPFileHeader));
 	outFile.write(reinterpret_cast<char*>(&bmpInfoHeader), sizeof(BMPInfoHeader));
 	outFile.write(reinterpret_cast<char*>(&bmpColorHeader), sizeof(BMPColorHeader));
-	WriteDataToFile(pixels, outFile);
+	WriteDataToFile(pixels, outFile, bmpInfoHeader.height * bmpInfoHeader.width * 4);
 
 	outFile.close();
 	std::cout << "Time: " << (clock() - start) / (float)CLOCKS_PER_SEC << " sec" << std::endl;
