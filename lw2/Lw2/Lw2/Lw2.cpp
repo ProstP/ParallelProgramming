@@ -44,18 +44,17 @@ struct BMPColorHeader
 
 #pragma pack(pop)
 
-struct Pixel
-{
-	uint32_t data;
-	int r;
-	int g;
-	int b;
-};
-
 using PixelMatrix = std::vector<std::vector<std::vector<std::vector<uint32_t>>>>;
 
-PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, int width, int height)
+PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, int width, int height, BMPColorHeader& color)
 {
+	auto getColor = [](uint32_t& data, uint32_t& mask) {
+		uint32_t color = 0;
+
+		color |= (data & mask); // >> std::popcount(mask);
+
+		return static_cast<int>(color);
+	};
 	std::vector<uint8_t> image(width * height * 4);
 	int currentByte = 0;
 	inFile.read(reinterpret_cast<char*>(image.data()), image.size());
@@ -76,12 +75,14 @@ PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, int width, int height
 			for (int j = 0; j < n; j++)
 			{
 				int countInWidth = pixelCountWidth + (j < remainderWidth ? 1 : 0);
-				std::vector<uint32_t> line(countInWidth);
+				std::vector<uint32_t> line(countInWidth, 0);
 
 				for (int x = 0; x < countInWidth; x++)
 				{
 					std::memcpy(&line[x], &image[currentByte], sizeof(uint32_t));
-					currentByte += 4;
+					currentByte += sizeof(uint32_t);
+
+					std::cout << getColor(line[x], color.blueMask) << std::endl;
 				}
 				row[j].push_back(line);
 			}
@@ -93,28 +94,59 @@ PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, int width, int height
 	return pixels;
 }
 
-void WriteDataToFile(const PixelMatrix& pixels, std::ofstream& outFile, int byteCount)
+void WriteDataToFile(const PixelMatrix& pixels, std::ofstream& outFile, int width, int height, int n)
 {
-	std::vector<uint8_t> image(byteCount);
+	std::vector<uint8_t> image(height * width * 4);
 	int currentByte = 0;
+	//int padding = (4 - (width * sizeof(uint32_t)) % 4) % 4;
 
-	for (int i = 0; i < pixels.size(); i++)
+	for (int i = 0; i < n; i++)
 	{
 		for (int y = 0; y < pixels[i][0].size(); y++)
 		{
 			std::vector<uint8_t> row;
-			for (int j = 0; j < pixels[i].size(); j++)
+			for (int j = 0; j < n; j++)
 			{
 				for (int x = 0; x < pixels[i][j][y].size(); x++)
 				{
 					std::memcpy(&image[currentByte], &pixels[i][j][y][x], sizeof(uint32_t));
-					currentByte += 4;
+					currentByte += sizeof(uint32_t);
 				}
 			}
+			//currentByte += padding;
 		}
 	}
 
 	outFile.write(reinterpret_cast<char*>(image.data()), image.size());
+}
+
+void Blur(std::vector<uint8_t>& pixels, int startX, int startY, int width, int height)
+{
+	std::vector<uint8_t> blurred(pixels.size());
+
+	for (int y = startY; y < height - 1; y++)
+	{
+		for (int x = startX; x < width - 1; x++)
+		{
+			int sumR = 0, sumG = 0, sumB = 0;
+			for (int ky = -1; ky <= 1; ky++)
+			{
+				for (int kx = -1; kx <= 1; kx++)
+				{
+					int idx = ((y + ky) * width + (x + kx)) * 3;
+					sumB += pixels[idx];
+					sumG += pixels[idx + 1];
+					sumR += pixels[idx + 2];
+				}
+			}
+			int avgIdx = (y * width + x) * 3;
+			blurred[avgIdx] = sumB / 9;
+			blurred[avgIdx + 1] = sumG / 9;
+			blurred[avgIdx + 2] = sumR / 9;
+		}
+	}
+
+	pixels.swap(blurred);
 }
 
 int main(int argc, char* argv[])
@@ -152,8 +184,7 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	auto pixels = ReadDataFromFile(n, inFile, bmpInfoHeader.width, bmpInfoHeader.height);
-
+	auto pixels = ReadDataFromFile(n, inFile, bmpInfoHeader.width, bmpInfoHeader.height, bmpColorHeader);
 	inFile.close();
 
 	std::ofstream outFile(argv[2]);
@@ -161,7 +192,7 @@ int main(int argc, char* argv[])
 	outFile.write(reinterpret_cast<char*>(&bmpFileHeader), sizeof(BMPFileHeader));
 	outFile.write(reinterpret_cast<char*>(&bmpInfoHeader), sizeof(BMPInfoHeader));
 	outFile.write(reinterpret_cast<char*>(&bmpColorHeader), sizeof(BMPColorHeader));
-	WriteDataToFile(pixels, outFile, bmpInfoHeader.height * bmpInfoHeader.width * 4);
+	WriteDataToFile(pixels, outFile, bmpInfoHeader.width, bmpInfoHeader.height, n);
 
 	outFile.close();
 	std::cout << "Time: " << (clock() - start) / (float)CLOCKS_PER_SEC << " sec" << std::endl;
