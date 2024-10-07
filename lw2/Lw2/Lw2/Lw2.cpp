@@ -3,6 +3,8 @@
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <stdint.h>
+#include <string>
 #include <vector>
 
 #pragma pack(push, 1)
@@ -44,109 +46,244 @@ struct BMPColorHeader
 
 #pragma pack(pop)
 
-using PixelMatrix = std::vector<std::vector<std::vector<std::vector<uint32_t>>>>;
-
-PixelMatrix ReadDataFromFile(int n, std::ifstream& inFile, int width, int height, BMPColorHeader& color)
+struct FileHeader
 {
-	auto getColor = [](uint32_t& data, uint32_t& mask) {
-		uint32_t color = 0;
+	BMPFileHeader file;
+	BMPInfoHeader info;
+	BMPColorHeader color;
+};
 
-		color |= (data & mask); // >> std::popcount(mask);
+struct Pixel
+{
+	int r;
+	int g;
+	int b;
+};
 
-		return static_cast<int>(color);
-	};
-	std::vector<uint8_t> image(width * height * 4);
+FileHeader ReadHeadersFromFile(std::ifstream& inFile)
+{
+	FileHeader header;
+
+	inFile.read(reinterpret_cast<char*>(&header.file), sizeof(BMPFileHeader));
+	inFile.read(reinterpret_cast<char*>(&header.info), sizeof(BMPInfoHeader));
+	inFile.read(reinterpret_cast<char*>(&header.color), sizeof(BMPColorHeader));
+
+	return header;
+}
+
+void WriteHeadersToFile(FileHeader& headers, std::ofstream& outFile)
+{
+	outFile.write(reinterpret_cast<char*>(&headers.file), sizeof(BMPFileHeader));
+	outFile.write(reinterpret_cast<char*>(&headers.info), sizeof(BMPInfoHeader));
+	outFile.write(reinterpret_cast<char*>(&headers.color), sizeof(BMPColorHeader));
+}
+
+std::vector<std::vector<Pixel>> CreatePixelImageFromData(int width, int height, const std::vector<uint8_t>& data)
+{
 	int currentByte = 0;
-	inFile.read(reinterpret_cast<char*>(image.data()), image.size());
 
-	int pixelCountWidth = width / n;
-	int pixelCountHeight = height / n;
-	int remainderWidth = width % n; // остатки обозначают сколько групп будут содержать на пиксель больше, чем указано,
-	int remainderHeight = height % n; // это надо чтобы у нас не осталось не прочитанных файлов
+	std::vector<std::vector<Pixel>> pixels;
 
-	PixelMatrix pixels;
-	for (int i = 0; i < n; i++)
+	for (int i = 0; i < width; i++)
 	{
-		int countInHeight = pixelCountHeight + (i < remainderHeight ? 1 : 0);
-		std::vector<std::vector<std::vector<uint32_t>>> row(n);
-
-		for (int y = 0; y < countInHeight; y++)
+		std::vector<Pixel> line;
+		for (int j = 0; j < height; j++)
 		{
-			for (int j = 0; j < n; j++)
-			{
-				int countInWidth = pixelCountWidth + (j < remainderWidth ? 1 : 0);
-				std::vector<uint32_t> line(countInWidth, 0);
+			int r = static_cast<int>(data[currentByte + 1]);
+			int g = static_cast<int>(data[currentByte + 2]);
+			int b = static_cast<int>(data[currentByte + 3]);
+			currentByte += 4;
 
-				for (int x = 0; x < countInWidth; x++)
-				{
-					std::memcpy(&line[x], &image[currentByte], sizeof(uint32_t));
-					currentByte += sizeof(uint32_t);
-
-					std::cout << getColor(line[x], color.blueMask) << std::endl;
-				}
-				row[j].push_back(line);
-			}
+			line.push_back(Pixel{ r, g, b });
 		}
 
-		pixels.push_back(row);
+		pixels.push_back(line);
 	}
 
 	return pixels;
 }
 
-void WriteDataToFile(const PixelMatrix& pixels, std::ofstream& outFile, int width, int height, int n)
+void WritePixelToData(const std::vector<std::vector<Pixel>>& pixels, std::vector<uint8_t>& data)
 {
-	std::vector<uint8_t> image(height * width * 4);
 	int currentByte = 0;
-	//int padding = (4 - (width * sizeof(uint32_t)) % 4) % 4;
+
+	for (const auto& line : pixels)
+	{
+		for (const auto& pixel : line)
+		{
+			data[currentByte + 1] = static_cast<uint8_t>(pixel.r);
+			data[currentByte + 2] = static_cast<uint8_t>(pixel.g);
+			data[currentByte + 3] = static_cast<uint8_t>(pixel.b);
+
+			currentByte += 4;
+		}
+	}
+}
+
+struct InfoForThread
+{
+	int n;
+	int startY;
+	int endY;
+	std::vector<std::vector<Pixel>>* pixels;
+};
+
+DWORD WINAPI BlurThread(const LPVOID lpParams)
+{
+	int count = 0;
+	InfoForThread* info = (InfoForThread*)lpParams;
+
+	int widthCount = info->pixels->at(info->startY).size() / info->n;
+	int remainderWidth = info->pixels->at(info->startY).size() % info->n;
+
+	int lastEnd = 0;
+	for (int i = 0; i < info->n; i++)
+	{
+		int startX = lastEnd;
+		lastEnd = lastEnd + widthCount;
+		int endX = lastEnd;
+
+		if (i < remainderWidth)
+		{
+			lastEnd++;
+		}
+		else
+		{
+			endX--;
+		}
+
+		//std::cout << std::to_string(startX) + " " + std::to_string(endX) + " : " + std::to_string(info->startY) + " " + std::to_string(info->endY) + "\n";
+
+		for (int y = info->startY; y <= info->startY; y++)
+		{
+			for (int x = startX; x <= endX; x++)
+			{
+				int sumR = 0;
+				int sumG = 0;
+				int sumB = 0;
+
+				for (int dy = y - 1; dy <= y + 1; dy++)
+				{
+					if (dy < info->startY || info->endY < dy)
+					{
+						sumR += (3 * info->pixels->at(y)[x].r);
+						sumG += (3 * info->pixels->at(y)[x].g);
+						sumB += (3 * info->pixels->at(y)[x].b);
+
+						continue;
+					}
+
+					for (int dx = x - 1; dx <= x + 1; dx++)
+					{
+						if (dx < startX || endX < dx)
+						{
+							sumR += info->pixels->at(y)[x].r;
+							sumG += info->pixels->at(y)[x].g;
+							sumB += info->pixels->at(y)[x].b;
+
+							continue;
+						}
+
+						sumR += info->pixels->at(dy)[dx].r;
+						sumG += info->pixels->at(dy)[dx].g;
+						sumB += info->pixels->at(dy)[dx].b;
+					}
+				}
+
+				const float BlurValue = 1.11111;
+				sumR *= BlurValue;
+				sumG *= BlurValue;
+				sumB *= BlurValue;
+
+				//std::cout << "1: " << sumR << " " << sumG << " " << sumB << std::endl;
+				//std::cout << "2: " << info->pixels->at(y)[x].r << " " << info->pixels->at(y)[x].g << " " << info->pixels->at(y)[x].b << std::endl;
+
+				info->pixels->at(y)[x].r = sumR / 9;
+				info->pixels->at(y)[x].g = sumG / 9;
+				info->pixels->at(y)[x].b = sumB / 9;
+				//count++;
+				//std::cout << "3: " << info->pixels->at(y)[x].r << " " << info->pixels->at(y)[x].g << " " << info->pixels->at(y)[x].b << std::endl;
+			}
+		}
+	}
+
+	//std::cout << count << std::endl;
+	ExitThread(0);
+}
+
+void BlurInThreads(int n, std::vector<std::vector<Pixel>>& pixels)
+{
+	int heightCount = pixels.size() / n; // остатки обозначают сколько групп будут содержать на пиксель больше, чем указано,
+	int remainderHeight = pixels.size() % n; // это надо чтобы у нас не осталось не прочитанных файлов
+
+	HANDLE* handles = new HANDLE[n];
+	InfoForThread* infos = new InfoForThread[n];
+
+	int lastEnd = 0;
+	for (int i = 0; i < n; i++)
+	{
+		InfoForThread info;
+		info.n = n;
+		info.pixels = &pixels;
+
+		info.startY = lastEnd;
+		lastEnd = lastEnd + heightCount;
+		info.endY = lastEnd;
+		if (i < remainderHeight)
+		{
+			lastEnd++;
+		}
+		else
+		{
+			info.endY--;
+		}
+		infos[i] = info;
+		handles[i] = CreateThread(NULL, 0, &BlurThread, &infos[i], CREATE_SUSPENDED, NULL);
+	}
 
 	for (int i = 0; i < n; i++)
 	{
-		for (int y = 0; y < pixels[i][0].size(); y++)
-		{
-			std::vector<uint8_t> row;
-			for (int j = 0; j < n; j++)
-			{
-				for (int x = 0; x < pixels[i][j][y].size(); x++)
-				{
-					std::memcpy(&image[currentByte], &pixels[i][j][y][x], sizeof(uint32_t));
-					currentByte += sizeof(uint32_t);
-				}
-			}
-			//currentByte += padding;
-		}
+		ResumeThread(handles[i]);
 	}
 
-	outFile.write(reinterpret_cast<char*>(image.data()), image.size());
+	WaitForMultipleObjects(n, handles, true, INFINITE);
 }
 
-void Blur(std::vector<uint8_t>& pixels, int startX, int startY, int width, int height)
+void BlurImage(int n, const std::string inFileName, const std::string& outFileName)
 {
-	std::vector<uint8_t> blurred(pixels.size());
-
-	for (int y = startY; y < height - 1; y++)
+	std::ifstream inFile(inFileName, std::ios::binary);
+	if (!inFile.is_open())
 	{
-		for (int x = startX; x < width - 1; x++)
-		{
-			int sumR = 0, sumG = 0, sumB = 0;
-			for (int ky = -1; ky <= 1; ky++)
-			{
-				for (int kx = -1; kx <= 1; kx++)
-				{
-					int idx = ((y + ky) * width + (x + kx)) * 3;
-					sumB += pixels[idx];
-					sumG += pixels[idx + 1];
-					sumR += pixels[idx + 2];
-				}
-			}
-			int avgIdx = (y * width + x) * 3;
-			blurred[avgIdx] = sumB / 9;
-			blurred[avgIdx + 1] = sumG / 9;
-			blurred[avgIdx + 2] = sumR / 9;
-		}
+		throw std::invalid_argument("Failed to open input file");
 	}
 
-	pixels.swap(blurred);
+	auto headers = ReadHeadersFromFile(inFile);
+
+	if (headers.file.fileType != 'MB')
+	{
+		throw std::invalid_argument("Input file not .bmp");
+	}
+	if (headers.info.bitCount != 32)
+	{
+		throw std::invalid_argument("Bit count must be 32");
+	}
+
+	std::vector<uint8_t> data(headers.info.width * headers.info.height * 4);
+	inFile.read(reinterpret_cast<char*>(data.data()), data.size());
+	inFile.close();
+
+	auto pixels = CreatePixelImageFromData(headers.info.width, headers.info.height, data);
+
+	BlurInThreads(n, pixels);
+
+	WritePixelToData(pixels, data);
+
+	std::ofstream outFile(outFileName);
+
+	WriteHeadersToFile(headers, outFile);
+	outFile.write(reinterpret_cast<char*>(data.data()), data.size());
+
+	outFile.close();
 }
 
 int main(int argc, char* argv[])
@@ -156,44 +293,14 @@ int main(int argc, char* argv[])
 	//std::cin >> n;
 	auto start = clock();
 
-	std::ifstream inFile(argv[1], std::ios::binary);
-	if (!inFile.is_open())
+	try
 	{
-		std::cout << "Failed to open input file" << std::endl;
-		return 1;
+		BlurImage(n, argv[1], argv[2]);
+	}
+	catch (const std::exception& e)
+	{
+		std::cout << e.what() << std::endl;
 	}
 
-	BMPFileHeader bmpFileHeader;
-	BMPInfoHeader bmpInfoHeader;
-	BMPColorHeader bmpColorHeader;
-
-	inFile.read(reinterpret_cast<char*>(&bmpFileHeader), sizeof(BMPFileHeader));
-	inFile.read(reinterpret_cast<char*>(&bmpInfoHeader), sizeof(BMPInfoHeader));
-	inFile.read(reinterpret_cast<char*>(&bmpColorHeader), sizeof(BMPColorHeader));
-
-	//std::cout << std::popcount(bmpColorHeader.blueMask) << std::endl;
-
-	if (bmpFileHeader.fileType != 'MB')
-	{
-		std::cout << "Input file not .bmp" << std::endl;
-		return 1;
-	}
-	if (bmpInfoHeader.bitCount != 32)
-	{
-		std::cout << "Bit count must be 32" << std::endl;
-		return 1;
-	}
-
-	auto pixels = ReadDataFromFile(n, inFile, bmpInfoHeader.width, bmpInfoHeader.height, bmpColorHeader);
-	inFile.close();
-
-	std::ofstream outFile(argv[2]);
-
-	outFile.write(reinterpret_cast<char*>(&bmpFileHeader), sizeof(BMPFileHeader));
-	outFile.write(reinterpret_cast<char*>(&bmpInfoHeader), sizeof(BMPInfoHeader));
-	outFile.write(reinterpret_cast<char*>(&bmpColorHeader), sizeof(BMPColorHeader));
-	WriteDataToFile(pixels, outFile, bmpInfoHeader.width, bmpInfoHeader.height, n);
-
-	outFile.close();
 	std::cout << "Time: " << (clock() - start) / (float)CLOCKS_PER_SEC << " sec" << std::endl;
 }
