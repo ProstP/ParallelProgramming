@@ -136,66 +136,69 @@ DWORD WINAPI BlurThread(const LPVOID lpParams)
 	int widthCount = info->pixels->at(info->startY).size() / info->n;
 	int remainderWidth = info->pixels->at(info->startY).size() % info->n;
 
-	int lastEnd = 0;
-	for (int i = 0; i < info->n; i++)
+	for (int repeat = 0; repeat < 7; repeat++)
 	{
-		int startX = lastEnd;
-		lastEnd = lastEnd + widthCount;
-		int endX = lastEnd;
+		int lastEnd = 0;
+		for (int i = 0; i < info->n; i++)
+		{
+			int startX = lastEnd;
+			lastEnd = lastEnd + widthCount;
+			int endX = lastEnd;
 
-		if (i < remainderWidth)
-		{
-			lastEnd++;
-		}
-		else
-		{
-			endX--;
-		}
-
-		for (int y = info->startY; y <= info->endY; y++)
-		{
-			for (int x = startX; x <= endX; x++)
+			if (i < remainderWidth)
 			{
-				int sumR = 0;
-				int sumG = 0;
-				int sumB = 0;
+				lastEnd++;
+			}
+			else
+			{
+				endX--;
+			}
 
-				for (int dy = y - 1; dy <= y + 1; dy++)
+			for (int y = info->startY; y <= info->endY; y++)
+			{
+				for (int x = startX; x <= endX; x++)
 				{
-					if (dy < info->startY || info->endY < dy)
-					{
-						sumR += (3 * info->pixels->at(y)[x].r);
-						sumG += (3 * info->pixels->at(y)[x].g);
-						sumB += (3 * info->pixels->at(y)[x].b);
+					int sumR = 0;
+					int sumG = 0;
+					int sumB = 0;
 
-						continue;
-					}
-
-					for (int dx = x - 1; dx <= x + 1; dx++)
+					for (int dy = y - 1; dy <= y + 1; dy++)
 					{
-						if (dx < startX || endX < dx)
+						if (dy < info->startY || info->endY < dy)
 						{
-							sumR += info->pixels->at(y)[x].r;
-							sumG += info->pixels->at(y)[x].g;
-							sumB += info->pixels->at(y)[x].b;
+							sumR += (3 * info->pixels->at(y)[x].r);
+							sumG += (3 * info->pixels->at(y)[x].g);
+							sumB += (3 * info->pixels->at(y)[x].b);
 
 							continue;
 						}
 
-						sumR += info->pixels->at(dy)[dx].r;
-						sumG += info->pixels->at(dy)[dx].g;
-						sumB += info->pixels->at(dy)[dx].b;
+						for (int dx = x - 1; dx <= x + 1; dx++)
+						{
+							if (dx < startX || endX < dx)
+							{
+								sumR += info->pixels->at(y)[x].r;
+								sumG += info->pixels->at(y)[x].g;
+								sumB += info->pixels->at(y)[x].b;
+
+								continue;
+							}
+
+							sumR += info->pixels->at(dy)[dx].r;
+							sumG += info->pixels->at(dy)[dx].g;
+							sumB += info->pixels->at(dy)[dx].b;
+						}
 					}
+
+					const float BlurValue = 1.11111;
+					sumR *= BlurValue;
+					sumG *= BlurValue;
+					sumB *= BlurValue;
+
+					info->pixels->at(y)[x].r = sumR / 9;
+					info->pixels->at(y)[x].g = sumG / 9;
+					info->pixels->at(y)[x].b = sumB / 9;
 				}
-
-				const float BlurValue = 1.11111;
-				sumR *= BlurValue;
-				sumG *= BlurValue;
-				sumB *= BlurValue;
-
-				info->pixels->at(y)[x].r = sumR / 9;
-				info->pixels->at(y)[x].g = sumG / 9;
-				info->pixels->at(y)[x].b = sumB / 9;
 			}
 		}
 	}
