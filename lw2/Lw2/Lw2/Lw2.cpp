@@ -84,10 +84,10 @@ std::vector<std::vector<Pixel>> CreatePixelImageFromData(int width, int height, 
 
 	std::vector<std::vector<Pixel>> pixels;
 
-	for (int i = 0; i < width; i++)
+	for (int i = 0; i < height; i++)
 	{
 		std::vector<Pixel> line;
-		for (int j = 0; j < height; j++)
+		for (int j = 0; j < width; j++)
 		{
 			int r = static_cast<int>(data[currentByte + 1]);
 			int g = static_cast<int>(data[currentByte + 2]);
@@ -154,7 +154,7 @@ DWORD WINAPI BlurThread(const LPVOID lpParams)
 
 		//std::cout << std::to_string(startX) + " " + std::to_string(endX) + " : " + std::to_string(info->startY) + " " + std::to_string(info->endY) + "\n";
 
-		for (int y = info->startY; y <= info->startY; y++)
+		for (int y = info->startY; y <= info->endY; y++)
 		{
 			for (int x = startX; x <= endX; x++)
 			{
@@ -201,13 +201,11 @@ DWORD WINAPI BlurThread(const LPVOID lpParams)
 				info->pixels->at(y)[x].r = sumR / 9;
 				info->pixels->at(y)[x].g = sumG / 9;
 				info->pixels->at(y)[x].b = sumB / 9;
-				//count++;
 				//std::cout << "3: " << info->pixels->at(y)[x].r << " " << info->pixels->at(y)[x].g << " " << info->pixels->at(y)[x].b << std::endl;
 			}
 		}
 	}
 
-	//std::cout << count << std::endl;
 	ExitThread(0);
 }
 
@@ -286,15 +284,38 @@ void BlurImage(int n, const std::string inFileName, const std::string& outFileNa
 	outFile.close();
 }
 
+void Test(int n)
+{
+	std::vector<std::vector<Pixel>> pixels;
+
+	for (int i = 0; i < 6; i++)
+	{
+		std::vector<Pixel> line;
+		for (int j = 0; j < 8; j++)
+		{
+			line.push_back(Pixel{ i + j, 2 * (i + j), 3 * (i + j) });
+		}
+		pixels.push_back(line);
+	}
+
+	BlurInThreads(n, pixels);
+}
+
 int main(int argc, char* argv[])
 {
 	std::cout << "Enter count of threads:" << std::endl;
-	int n = 10;
-	//std::cin >> n;
+	int n;
+	std::cin >> n;
+	if (n < 0)
+	{
+		std::cout << "Num of thread is positive value" << std::endl;
+		return 1;
+	}
 	auto start = clock();
 
 	try
 	{
+		//Test(n);
 		BlurImage(n, argv[1], argv[2]);
 	}
 	catch (const std::exception& e)
