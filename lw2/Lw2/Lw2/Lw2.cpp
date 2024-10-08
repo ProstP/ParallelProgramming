@@ -152,8 +152,6 @@ DWORD WINAPI BlurThread(const LPVOID lpParams)
 			endX--;
 		}
 
-		//std::cout << std::to_string(startX) + " " + std::to_string(endX) + " : " + std::to_string(info->startY) + " " + std::to_string(info->endY) + "\n";
-
 		for (int y = info->startY; y <= info->endY; y++)
 		{
 			for (int x = startX; x <= endX; x++)
@@ -195,13 +193,9 @@ DWORD WINAPI BlurThread(const LPVOID lpParams)
 				sumG *= BlurValue;
 				sumB *= BlurValue;
 
-				//std::cout << "1: " << sumR << " " << sumG << " " << sumB << std::endl;
-				//std::cout << "2: " << info->pixels->at(y)[x].r << " " << info->pixels->at(y)[x].g << " " << info->pixels->at(y)[x].b << std::endl;
-
 				info->pixels->at(y)[x].r = sumR / 9;
 				info->pixels->at(y)[x].g = sumG / 9;
 				info->pixels->at(y)[x].b = sumB / 9;
-				//std::cout << "3: " << info->pixels->at(y)[x].r << " " << info->pixels->at(y)[x].g << " " << info->pixels->at(y)[x].b << std::endl;
 			}
 		}
 	}
