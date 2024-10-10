@@ -314,12 +314,12 @@ void SetCoreCount(unsigned int num)
 	HANDLE hProcess = GetCurrentProcess();
 	DWORD_PTR mask = static_cast<DWORD_PTR>(pow(2, num) - 1);
 
-	SetProcessAffinityMask(hProcess, mask);
+	SetThreadAffinityMask(hProcess, mask);
 }
 
 int main(int argc, char* argv[])
 {
-	//SetCoreCount(4);
+	SetCoreCount(2);
 	std::cout << "Enter count of threads:" << std::endl;
 	int n;
 	std::cin >> n;
