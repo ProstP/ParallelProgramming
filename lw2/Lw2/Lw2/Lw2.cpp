@@ -1,8 +1,10 @@
 ﻿#include <Windows.h>
 #include <bit>
+#include <cmath>
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdint.h>
 #include <string>
 #include <vector>
@@ -298,8 +300,26 @@ void Test(int n)
 	BlurInThreads(n, pixels);
 }
 
+void SetCoreCount(unsigned int num)
+{
+	SYSTEM_INFO info;
+	GetSystemInfo(&info);
+	int maxProccCount = info.dwNumberOfProcessors;
+
+	if (num > maxProccCount)
+	{
+		num = maxProccCount;
+	}
+
+	HANDLE hProcess = GetCurrentProcess();
+	DWORD_PTR mask = static_cast<DWORD_PTR>(pow(2, num) - 1);
+
+	SetProcessAffinityMask(hProcess, mask);
+}
+
 int main(int argc, char* argv[])
 {
+	//SetCoreCount(4);
 	std::cout << "Enter count of threads:" << std::endl;
 	int n;
 	std::cin >> n;
