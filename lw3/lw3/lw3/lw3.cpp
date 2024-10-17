@@ -1,7 +1,7 @@
 ﻿#include <Windows.h>
+#include <fstream>
 #include <iostream>
 #include <string>
-#include <fstream>
 
 struct ThreadParams
 {
@@ -36,30 +36,13 @@ DWORD WINAPI ThreadProc(const LPVOID lpParams)
 		}
 
 		//std::cout << std::to_string(num) + "|" + std::to_string((clock() - start) / (float)CLOCKS_PER_SEC) + "\n";
-		out << std::to_string(params.num) + "|" + std::to_string((clock() -params.start) / (float)CLOCKS_PER_SEC) << std::endl;
+		out << std::to_string(params.num) + "|" + std::to_string((clock() - params.start) / (float)CLOCKS_PER_SEC) << std::endl;
 		//out << std::to_string((clock() - params.start) / (float)CLOCKS_PER_SEC) << std::endl;
 	}
 
 	out.close();
 
 	ExitThread(0);
-}
-
-void SetCoreCount(unsigned int num)
-{
-	SYSTEM_INFO info;
-	GetSystemInfo(&info);
-	int maxProccCount = info.dwNumberOfProcessors;
-
-	if (num > maxProccCount)
-	{
-		num = maxProccCount;
-	}
-
-	HANDLE hProcess = GetCurrentProcess();
-	DWORD_PTR mask = static_cast<DWORD_PTR>(pow(2, num) - 1);
-
-	SetThreadAffinityMask(hProcess, mask);
 }
 
 int main()
@@ -85,6 +68,9 @@ int main()
 			return 1;
 		}
 	}
+
+	SetThreadPriority(handles[0], THREAD_PRIORITY_HIGHEST);
+	SetThreadPriority(handles[1], THREAD_PRIORITY_NORMAL);
 
 	for (int i = 0; i < threadNum; i++)
 	{
