@@ -15,14 +15,14 @@ void SynchronousFor(int bound)
 		pi += value;
 	}
 
-	std::cout << "For(синхронно): " << pi << std::endl;
+	std::cout << "For(синхронно): " << pi * 4 << std::endl;
 }
 
 void ForInParallel(int bound)
 {
 	double pi = 0;
 
-#pragma omp parallel
+#pragma omp parallel for
 	for (int i = 0; i < bound; i++)
 	{
 		double value = (i % 2 == 0 ? 1 : -1);
@@ -31,7 +31,7 @@ void ForInParallel(int bound)
 		pi += value;
 	}
 
-	std::cout << "For(в паралелльных потоках): " << pi << std::endl;
+	std::cout << "For(в паралелльных потоках): " << pi * 4 << std::endl;
 }
 
 void ParallelFor(int bound)
@@ -48,7 +48,7 @@ void ParallelFor(int bound)
 		pi += value;
 	}
 
-	std::cout << "For(паралелльно с atomic): " << pi << std::endl;
+	std::cout << "For(паралелльно с atomic): " << pi * 4 << std::endl;
 }
 
 void ParallelForWithReduction(int bound)
@@ -64,7 +64,7 @@ void ParallelForWithReduction(int bound)
 		pi += value;
 	}
 
-	std::cout << "For(с reduction): " << pi << std::endl;
+	std::cout << "For(с reduction): " << pi * 4 << std::endl;
 }
 
 int main()
@@ -76,6 +76,6 @@ int main()
 	//SynchronousFor(1'000'000);
 	//ForInParallel(1'000'000);
 	//ParallelFor(1'000'000);
-	//ParallelForWithReduction(1'000'000);
+	ParallelForWithReduction(1'000'000);
 	std::cout << clock() - start / (float)CLOCKS_PER_SEC << std::endl;
 }
