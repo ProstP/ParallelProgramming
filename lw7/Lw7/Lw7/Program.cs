@@ -7,7 +7,7 @@ string ReadFileNameFromConsole()
     return Console.ReadLine()!;
 }
 
-List<char> ReadCharactersToDeleteFromConsole()
+IReadOnlyList<char> ReadCharactersToDeleteFromConsole()
 {
     Console.WriteLine( "Enter characters you want to delete, ... to end" );
 
@@ -26,7 +26,7 @@ List<char> ReadCharactersToDeleteFromConsole()
 
 string ReadTextFromFile( string fileName )
 {
-    string text = "";
+    string text;
 
     using ( StreamReader streamReader = new StreamReader( fileName ) )
     {
@@ -36,7 +36,7 @@ string ReadTextFromFile( string fileName )
     return text;
 }
 
-string DeleteCharactersInText( string text, List<char> charactersToDelete )
+string DeleteCharactersInText( string text, IReadOnlyList<char> charactersToDelete )
 {
     string newText = "";
 
@@ -60,6 +60,6 @@ async Task WriteTextToFile( string text, string fileName )
 }
 
 string fileName = ReadFileNameFromConsole();
-List<char> charactersToDelete = ReadCharactersToDeleteFromConsole();
+IReadOnlyList<char> charactersToDelete = ReadCharactersToDeleteFromConsole();
 string editedText = DeleteCharactersInText( ReadTextFromFile( fileName ), charactersToDelete );
 await WriteTextToFile( editedText, fileName );
